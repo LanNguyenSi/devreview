@@ -1,4 +1,5 @@
-import type { PRContext, ReviewScore, ReviewConfig, DEFAULT_CONFIG } from '../types.js';
+import type { PRContext, ReviewScore, ReviewConfig } from '../types.js';
+import { DEFAULT_CONFIG } from '../types.js';
 
 export class Scorer {
   private config: ReviewConfig;
@@ -52,7 +53,7 @@ export class Scorer {
     }
 
     // Check for code patterns in patches
-    const patches = context.files.map(f => f.patch || '').join('\\n');
+    const patches = context.files.map(f => f.patch || '').join('\n');
     
     // Positive: Error handling
     if (patches.includes('try') && patches.includes('catch')) {
@@ -178,14 +179,14 @@ export class Scorer {
     }
 
     // Check for JSDoc/TSDoc comments in patches
-    const patches = context.files.map(f => f.patch || '').join('\\n');
+    const patches = context.files.map(f => f.patch || '').join('\n');
     
     if (patches.includes('/**') || patches.includes('/*')) {
       score += 1; // Has documentation comments
     }
 
     // Check for inline comments
-    if (patches.match(/\\/\\//g)?.length > 5) {
+    if ((patches.match(/\/\//g) ?? []).length > 5) {
       score += 0.5; // Good inline documentation
     }
 
@@ -203,7 +204,7 @@ export class Scorer {
   scoreBestPractices(context: PRContext): number {
     let score = 10;
 
-    const patches = context.files.map(f => f.patch || '').join('\\n');
+    const patches = context.files.map(f => f.patch || '').join('\n');
 
     // Check for common anti-patterns
     if (patches.includes('var ')) {

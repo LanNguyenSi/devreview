@@ -76,7 +76,7 @@ export class Scorer {
     let score = 10;
 
     // Check for proper separation of concerns
-    const srcFiles = context.files.filter(f => f.filename.includes('/src/'));
+    const srcFiles = context.files.filter(f => f.filename.startsWith('src/'));
     const testFiles = context.files.filter(f => 
       f.filename.includes('test') || 
       f.filename.includes('spec') || 
@@ -159,6 +159,10 @@ export class Scorer {
       score += 1;
     }
 
+    if (this.config.rules.requireTests && codeFiles.length > 0 && testFiles.length === 0) {
+      score = Math.min(score, 1);
+    }
+
     return Math.max(0, Math.min(10, score));
   }
 
@@ -192,6 +196,10 @@ export class Scorer {
 
     // Penalty: Large changes without README update
     if (context.additions > 200 && !hasReadmeUpdate) {
+      score -= 1;
+    }
+
+    if (this.config.rules.requireDocs && context.additions > 50 && !hasReadmeUpdate) {
       score -= 1;
     }
 

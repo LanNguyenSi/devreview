@@ -5,16 +5,18 @@
 import express from 'express';
 import { Webhooks } from '@octokit/webhooks';
 import { Reviewer } from '../reviewer/reviewer.js';
+import type { ReviewConfig } from '../types.js';
 import { DEFAULT_CONFIG } from '../types.js';
 
 export function createWebhookServer(options: {
   githubToken: string;
   webhookSecret: string;
   port?: number;
+  config?: ReviewConfig;
 }) {
   const app = express();
   const webhooks = new Webhooks({ secret: options.webhookSecret });
-  const reviewer = new Reviewer(options.githubToken, DEFAULT_CONFIG);
+  const reviewer = new Reviewer(options.githubToken, options.config ?? DEFAULT_CONFIG);
   const port = options.port || 3000;
 
   // GitHub webhook payload
@@ -23,6 +25,11 @@ export function createWebhookServer(options: {
     const event = req.headers['x-github-event'] as string;
 
     try {
+      if (!signature) {
+        res.status(400).json({ error: 'Missing signature header' });
+        return;
+      }
+
       if (!await webhooks.verify(req.body.toString(), signature)) {
         res.status(401).send('Invalid signature');
         return;

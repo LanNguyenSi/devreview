@@ -1,114 +1,80 @@
 # DevReview
 
-**Automated GitHub PR Code Review Agent**
+Automated GitHub PR reviews with a small scoring engine, CLI commands, and a webhook server.
 
-DevReview is an intelligent code review agent that analyzes pull requests and provides structured, actionable feedback with scoring.
+## What It Does
 
-## Features
+- Reviews pull requests from a GitHub PR URL
+- Produces category scores for code quality, architecture, testing, documentation, and best practices
+- Can post the result back to GitHub as a pull request review
+- Can run as a webhook server for `pull_request` events
+- Reads optional `.ai/*.md` files from the target repository for lightweight project context
+- Applies project-level rules from `.devreview.json`
 
-- 🤖 **Automated PR Analysis** - Analyzes code quality, architecture, best practices
-- 📊 **Scoring System** - Provides 1-10 ratings with detailed breakdown
-- 💬 **GitHub Integration** - Posts review comments directly on PRs
-- 🧠 **Context-Aware** - Reads `.ai/ARCHITECTURE.md` for project-specific context
-- 🔍 **Multi-Language** - Supports TypeScript, JavaScript, Python, and more
+## Installation
 
-## Quick Start
+```bash
+npm install
+npm run build
+```
 
-### Installation
+Global install is also possible:
 
 ```bash
 npm install -g devreview
 ```
 
-### GitHub App Setup
+## Environment
 
-1. Create a GitHub App with webhook permissions
-2. Set webhook URL to `https://your-server.com/webhook`
-3. Configure environment variables:
+DevReview currently uses a GitHub token, not a GitHub App flow.
 
 ```bash
-GITHUB_APP_ID=your-app-id
-GITHUB_PRIVATE_KEY=path/to/private-key.pem
+GITHUB_TOKEN=your-token
 WEBHOOK_SECRET=your-webhook-secret
+PORT=3000
+DEVREVIEW_CONFIG=.devreview.json
 ```
 
-### Running the Server
+## CLI
+
+Review a PR in the terminal:
+
+```bash
+devreview review https://github.com/owner/repo/pull/123
+```
+
+Post a review back to GitHub:
+
+```bash
+devreview review https://github.com/owner/repo/pull/123 --comment
+```
+
+Show only the score object:
+
+```bash
+devreview score https://github.com/owner/repo/pull/123
+```
+
+Start the webhook server:
 
 ```bash
 devreview server --port 3000
 ```
 
-### CLI Usage
+Each command also accepts `--token <token>` and `--config <path>`.
 
-Review a PR manually:
+## Webhook Mode
 
-```bash
-devreview review --repo owner/repo --pr 123
-```
+The server listens on:
 
-## Review Output Example
+- `POST /webhook`
+- `GET /health`
 
-```markdown
-## 🔍 DevReview Analysis
-
-**Overall Score: 8.5/10**
-
-### ✅ Strengths
-- Clean TypeScript implementation with proper types
-- Good error handling with try-catch blocks
-- Well-structured modular architecture
-
-### ⚠️ Areas for Improvement
-- Missing unit tests for new features
-- Some functions could use JSDoc comments
-- Consider extracting magic numbers to constants
-
-### 📊 Detailed Scores
-- Code Quality: 9/10
-- Architecture: 8/10
-- Testing: 6/10
-- Documentation: 8/10
-- Best Practices: 9/10
-
-### 💡 Recommendations
-1. Add unit tests for `UserService.createUser()`
-2. Document the webhook signature validation logic
-3. Consider using a config file for environment variables
-
----
-*Reviewed by DevReview 🤖 | [Learn More](https://github.com/LanNguyenSi/devreview)*
-```
-
-## Architecture
-
-```
-devreview/
-├── src/
-│   ├── server/          # Webhook server
-│   │   ├── webhook.ts   # GitHub webhook handler
-│   │   └── server.ts    # Express server
-│   ├── reviewer/        # Core review logic
-│   │   ├── analyzer.ts  # Code analysis
-│   │   ├── scorer.ts    # Scoring system
-│   │   └── formatter.ts # Review formatting
-│   ├── github/          # GitHub API integration
-│   │   ├── client.ts    # GitHub API client
-│   │   └── comments.ts  # PR comment management
-│   ├── ai/              # AI-powered analysis
-│   │   ├── context.ts   # .ai/ folder reader
-│   │   └── llm.ts       # LLM integration (optional)
-│   └── cli/             # CLI commands
-│       ├── review.ts    # Manual review command
-│       └── server.ts    # Server start command
-├── .ai/                 # Project context
-│   ├── ARCHITECTURE.md
-│   └── AGENTS.md
-└── package.json
-```
+It currently reacts to `pull_request` events with the actions `opened` and `synchronize`.
 
 ## Configuration
 
-Create a `.devreview.json` in your project:
+Create a `.devreview.json` in the working directory to customize scoring and review rules:
 
 ```json
 {
@@ -119,6 +85,7 @@ Create a `.devreview.json` in your project:
   },
   "ignore": [
     "dist/**",
+    "coverage/**",
     "node_modules/**"
   ],
   "scoring": {
@@ -131,71 +98,24 @@ Create a `.devreview.json` in your project:
 }
 ```
 
-## Scoring System
+`ignore` patterns support `*` and `**`.
 
-DevReview uses a weighted scoring system (Ice's 9.5/10 style):
+## AI Context
 
-| Category | Weight | Criteria |
-|----------|--------|----------|
-| Code Quality | 30% | Clean code, type safety, error handling |
-| Architecture | 25% | Modularity, separation of concerns, scalability |
-| Testing | 20% | Test coverage, test quality, edge cases |
-| Documentation | 15% | README, comments, API docs |
-| Best Practices | 10% | Security, performance, conventions |
+If the target repository contains these files, DevReview will read them and mention that project context was available:
 
-**Final Score = Σ(Category Score × Weight)**
-
-## AI Context Integration
-
-DevReview can read `.ai/` folder for project-specific context:
-
-```
-your-project/
-├── .ai/
-│   ├── ARCHITECTURE.md  # System overview
-│   ├── AGENTS.md        # Team context
-│   └── DECISIONS.md     # Technical decisions
+```text
+.ai/AGENTS.md
+.ai/ARCHITECTURE.md
+.ai/DECISIONS.md
 ```
 
-This helps DevReview provide **context-aware reviews** that understand your project's specific architecture and constraints.
+This is currently lightweight context enrichment, not full LLM-based review generation.
 
 ## Development
 
 ```bash
-# Install dependencies
 npm install
-
-# Run in development mode
-npm run dev
-
-# Build
 npm run build
-
-# Test
 npm test
 ```
-
-## Roadmap
-
-- [x] Basic GitHub webhook integration
-- [x] Code quality analysis
-- [x] Scoring system
-- [x] PR comment posting
-- [ ] .ai/ folder context reading
-- [ ] LLM-powered analysis (optional)
-- [ ] Multi-language support expansion
-- [ ] Learning from past reviews
-- [ ] CI/CD integration
-- [ ] Slack/Discord notifications
-
-## Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## License
-
-MIT © [Lan Nguyen Si](https://github.com/LanNguyenSi)
-
----
-
-**Built by Lava 🌋 as part of Ice-Lava DX Tools collaboration**

@@ -7,6 +7,7 @@ import { ReviewFormatter } from './formatter.js';
 import { GitHubClient } from '../github/client.js';
 import type { PRContext, ReviewResult, ReviewConfig } from '../types.js';
 import { DEFAULT_CONFIG } from '../types.js';
+import { matchesGlob } from '../utils/glob.js';
 
 export class Reviewer {
   private scorer: Scorer;
@@ -25,26 +26,7 @@ export class Reviewer {
    * Review a PR end-to-end
    */
   async reviewPR(owner: string, repo: string, prNumber: number): Promise<ReviewResult> {
-    // 1. Fetch PR context
-    const context = await this.github.getPRContext(owner, repo, prNumber);
-
-    // 2. Filter ignored files
-    context.files = context.files.filter(f =>
-      !this.config.ignore.some(pattern => {
-        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
-        return regex.test(f.filename);
-      })
-    );
-
-    // 3. Try to load .ai/ context for smarter reviews
-    const aiContext = await this.github.getAIContext(owner, repo);
-
-    // 4. Score
-    const score = this.scorer.scorePR(context);
-
-    // 5. Generate insights
-    const result = this.generateInsights(context, score, aiContext);
-
+    const { result } = await this.prepareReview(owner, repo, prNumber);
     return result;
   }
 
@@ -52,18 +34,7 @@ export class Reviewer {
    * Review and post comment on GitHub
    */
   async reviewAndComment(owner: string, repo: string, prNumber: number): Promise<ReviewResult> {
-    const context = await this.github.getPRContext(owner, repo, prNumber);
-
-    context.files = context.files.filter(f =>
-      !this.config.ignore.some(pattern => {
-        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
-        return regex.test(f.filename);
-      })
-    );
-
-    const aiContext = await this.github.getAIContext(owner, repo);
-    const score = this.scorer.scorePR(context);
-    const result = this.generateInsights(context, score, aiContext);
+    const { context, score, result } = await this.prepareReview(owner, repo, prNumber);
 
     // Post review on GitHub
     const markdown = this.formatter.formatReview(context, result);
@@ -77,20 +48,29 @@ export class Reviewer {
    * Review and return terminal output (for CLI)
    */
   async reviewForTerminal(owner: string, repo: string, prNumber: number): Promise<string> {
-    const context = await this.github.getPRContext(owner, repo, prNumber);
+    const { context, result } = await this.prepareReview(owner, repo, prNumber);
+    return this.formatter.formatTerminal(context, result);
+  }
 
-    context.files = context.files.filter(f =>
-      !this.config.ignore.some(pattern => {
-        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
-        return regex.test(f.filename);
-      })
-    );
+  private async prepareReview(owner: string, repo: string, prNumber: number): Promise<{
+    context: PRContext;
+    score: ReturnType<Scorer['scorePR']>;
+    result: ReviewResult;
+  }> {
+    const context = await this.github.getPRContext(owner, repo, prNumber);
+    context.files = this.filterIgnoredFiles(context.files);
 
     const aiContext = await this.github.getAIContext(owner, repo);
     const score = this.scorer.scorePR(context);
     const result = this.generateInsights(context, score, aiContext);
 
-    return this.formatter.formatTerminal(context, result);
+    return { context, score, result };
+  }
+
+  private filterIgnoredFiles(files: PRContext['files']): PRContext['files'] {
+    return files.filter(
+      (file) => !this.config.ignore.some((pattern) => matchesGlob(pattern, file.filename)),
+    );
   }
 
   private generateInsights(
@@ -114,10 +94,16 @@ export class Reviewer {
     if (score.testing >= 9) strengths.push('Good test coverage');
     if (score.testing < 5) improvements.push('Add tests for new functionality');
     if (score.testing < 3) improvements.push('⚠️ No tests detected — this is critical');
+    if (this.config.rules.requireTests && score.testing < 7) {
+      improvements.push('Project configuration requires tests for changed code paths');
+    }
 
     // Documentation insights
     if (score.documentation >= 9) strengths.push('Well documented');
     if (score.documentation < 6) improvements.push('Add documentation for new features');
+    if (this.config.rules.requireDocs && score.documentation < 7) {
+      improvements.push('Project configuration requires documentation updates for notable changes');
+    }
 
     // Best practices
     if (score.bestPractices >= 9) strengths.push('Follows best practices');

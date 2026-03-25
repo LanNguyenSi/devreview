@@ -3,6 +3,7 @@
 // ============================================================================
 
 import 'dotenv/config';
+import { loadConfig } from './config.js';
 import { createWebhookServer } from './server/webhook.js';
 
 const githubToken = process.env.GITHUB_TOKEN;
@@ -13,10 +14,13 @@ if (!githubToken || !webhookSecret) {
   process.exit(1);
 }
 
+const config = await loadConfig(process.env.DEVREVIEW_CONFIG);
+
 const server = createWebhookServer({
   githubToken,
   webhookSecret,
   port: parseInt(process.env.PORT || '3000'),
+  config,
 });
 
 server.start();

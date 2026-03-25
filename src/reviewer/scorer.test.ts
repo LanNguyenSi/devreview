@@ -88,6 +88,33 @@ describe("Scorer", () => {
       const score = scorer.scoreTesting(pr);
       expect(score).toBeLessThanOrEqual(3);
     });
+
+    it("enforces stricter minimum when tests are required", () => {
+      const strictScorer = new Scorer({
+        ...DEFAULT_CONFIG,
+        rules: { ...DEFAULT_CONFIG.rules, requireTests: true },
+      });
+      const pr = makePR({
+        files: [
+          { filename: "src/feature.ts", status: "added", additions: 100, deletions: 0 },
+        ],
+      });
+
+      expect(strictScorer.scoreTesting(pr)).toBe(1);
+    });
+  });
+
+  describe("scoreArchitecture", () => {
+    it("recognizes source files in src/ paths", () => {
+      const pr = makePR({
+        files: [
+          { filename: "src/feature.ts", status: "added", additions: 40, deletions: 0 },
+          { filename: "tests/feature.test.ts", status: "added", additions: 20, deletions: 0 },
+        ],
+      });
+
+      expect(scorer.scoreArchitecture(pr)).toBeGreaterThan(9.5);
+    });
   });
 
   describe("scoreDocumentation", () => {
@@ -97,6 +124,19 @@ describe("Scorer", () => {
       });
       const without = makePR();
       expect(scorer.scoreDocumentation(withReadme)).toBeGreaterThan(scorer.scoreDocumentation(without));
+    });
+
+    it("penalizes larger undocumented changes when docs are required", () => {
+      const strictScorer = new Scorer({
+        ...DEFAULT_CONFIG,
+        rules: { ...DEFAULT_CONFIG.rules, requireDocs: true },
+      });
+      const pr = makePR({
+        additions: 120,
+        files: [{ filename: "src/feature.ts", status: "modified", additions: 120, deletions: 10 }],
+      });
+
+      expect(strictScorer.scoreDocumentation(pr)).toBe(6);
     });
   });
 

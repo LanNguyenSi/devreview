@@ -5,11 +5,19 @@
 import { Octokit } from '@octokit/rest';
 import type { PRContext, PRFile } from '../types.js';
 
+type GitHubPullRequestFile = {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  patch?: string;
+};
+
 export class GitHubClient {
   private octokit: Octokit;
 
-  constructor(token: string) {
-    this.octokit = new Octokit({ auth: token });
+  constructor(token: string, octokit = new Octokit({ auth: token })) {
+    this.octokit = octokit;
   }
 
   /**
@@ -18,7 +26,12 @@ export class GitHubClient {
   async getPRContext(owner: string, repo: string, prNumber: number): Promise<PRContext> {
     const [pr, files] = await Promise.all([
       this.octokit.pulls.get({ owner, repo, pull_number: prNumber }),
-      this.octokit.pulls.listFiles({ owner, repo, pull_number: prNumber, per_page: 100 }),
+      this.octokit.paginate(this.octokit.pulls.listFiles, {
+        owner,
+        repo,
+        pull_number: prNumber,
+        per_page: 100,
+      }) as Promise<GitHubPullRequestFile[]>,
     ]);
 
     return {
@@ -30,7 +43,7 @@ export class GitHubClient {
       commits: pr.data.commits,
       additions: pr.data.additions,
       deletions: pr.data.deletions,
-      files: files.data.map((f): PRFile => ({
+      files: files.map((f): PRFile => ({
         filename: f.filename,
         status: f.status as PRFile['status'],
         additions: f.additions,
@@ -86,21 +99,23 @@ export class GitHubClient {
   }> {
     const context: Record<string, string> = {};
 
-    for (const file of ['AGENTS.md', 'ARCHITECTURE.md', 'DECISIONS.md']) {
-      try {
-        const response = await this.octokit.repos.getContent({
-          owner,
-          repo,
-          path: `.ai/${file}`,
-        });
-        if ('content' in response.data) {
-          context[file.replace('.md', '').toLowerCase()] =
-            Buffer.from(response.data.content, 'base64').toString('utf-8');
+    await Promise.all(
+      ['AGENTS.md', 'ARCHITECTURE.md', 'DECISIONS.md'].map(async (file) => {
+        try {
+          const response = await this.octokit.repos.getContent({
+            owner,
+            repo,
+            path: `.ai/${file}`,
+          });
+          if ('content' in response.data) {
+            context[file.replace('.md', '').toLowerCase()] =
+              Buffer.from(response.data.content, 'base64').toString('utf-8');
+          }
+        } catch {
+          // File doesn't exist, skip
         }
-      } catch {
-        // File doesn't exist, skip
-      }
-    }
+      }),
+    );
 
     return context;
   }
